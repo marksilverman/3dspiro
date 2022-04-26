@@ -13,22 +13,22 @@ class point3d:
 class mat4x4:
     def __init__(self):
         self.data = [[0, 0, 0, 0],[0, 0, 0, 0],[0, 0, 0, 0],[0, 0, 0, 0]]
+    
+    def multiply(self, input, output):
+        output.x = input.x * self.data[0][0] + input.y * self.data[1][0] + input.z * self.data[2][0] + self.data[3][0]
+        output.y = input.x * self.data[0][1] + input.y * self.data[1][1] + input.z * self.data[2][1] + self.data[3][1]
+        output.z = input.x * self.data[0][2] + input.y * self.data[1][2] + input.z * self.data[2][2] + self.data[3][2]
+        w = input.x * self.data[0][3] + input.y * self.data[1][3] + input.z * self.data[2][3] + self.data[3][3]
+        if w != 0.0:
+            output.x /= w
+            output.y /= w
+            output.z /= w
 
 def draw(p1, p2):
     l = Line(p1, p2)
     l.setFill(white)
     l.setWidth(4)
     l.draw(win)
-
-def MultiplyMatrixVector(input, output, matrix):
-    output.x = input.x * matrix.data[0][0] + input.y * matrix.data[1][0] + input.z * matrix.data[2][0] + matrix.data[3][0]
-    output.y = input.x * matrix.data[0][1] + input.y * matrix.data[1][1] + input.z * matrix.data[2][1] + matrix.data[3][1]
-    output.z = input.x * matrix.data[0][2] + input.y * matrix.data[1][2] + input.z * matrix.data[2][2] + matrix.data[3][2]
-    w = input.x * matrix.data[0][3] + input.y * matrix.data[1][3] + input.z * matrix.data[2][3] + matrix.data[3][3]
-    if w != 0.0:
-        output.x /= w
-        output.y /= w
-        output.z /= w
 
 width = 800
 height = 800
@@ -41,19 +41,23 @@ win = GraphWin('lines', width, height)
 win.setCoords(0, 0, win.width, win.height)
 win.setBackground('black')
 
-radius1 = 0.3
-radius2 = 0.1
+radius1 = 0.5
+radius2 = 0.2
 radius = radius1 - radius2
 
 pointCloud = []
 
-pen = 0.2
+pen = 0.8
 angle = 0.0
-while angle < 2 * math.pi:
+ctr = 0.0
+while angle < 5 * math.pi:
     x = radius * math.cos(angle) + pen * math.cos(angle * radius / radius2)
     y = radius * math.sin(angle) - pen * math.sin(angle * radius / radius2)
-    pointCloud.append(point3d(x, y))
-    angle += 0.1
+    z = math.sin(ctr) * radius1
+    ctr += 0.2
+    #print(f'x={x}, y={y}, z={z}')
+    pointCloud.append(point3d(x, y, z))
+    angle += 0.05
 
 # Projection Matrix
 fNear = 0.1
@@ -86,56 +90,57 @@ rotated_on_z = point3d()
 rotated_on_zx = point3d()
 projected = point3d()
 
-angle = 0.0
+angle1 = 0.0
+angle2 = 0.0
 
 while True:
-    angle += fElapsedTime
-    matRotZ.data[0][0] = math.cos(angle)
-    matRotZ.data[0][1] = math.sin(angle)
-    matRotZ.data[1][0] = -math.sin(angle)
-    matRotZ.data[1][1] = math.cos(angle)
+    angle1 += fElapsedTime
+    angle2 += 0.02
 
-    matRotX.data[1][1] = math.cos(angle * 0.5)
-    matRotX.data[1][2] = math.sin(angle * 0.5)
-    matRotX.data[2][1] = -math.sin(angle * 0.5)
-    matRotX.data[2][2] = math.cos(angle * 0.5)
+    matRotZ.data[0][0] = math.cos(angle2)
+    matRotZ.data[0][1] = math.sin(angle2)
+    matRotZ.data[1][0] = -math.sin(angle2)
+    matRotZ.data[1][1] = math.cos(angle2)
 
-    stop = False
+    matRotX.data[1][1] = math.cos(angle1 * 0.5)
+    matRotX.data[1][2] = math.sin(angle1 * 0.5)
+    matRotX.data[2][1] = -math.sin(angle1 * 0.5)
+    matRotX.data[2][2] = math.cos(angle1 * 0.5)
 
+    p2 = None
     for thisPoint in pointCloud:
-        # rotate on Z-Axis
-        MultiplyMatrixVector(thisPoint, rotated_on_z, matRotZ)
+        # rotate on Z
+        matRotZ.multiply(thisPoint, rotated_on_z)
 
-        # rotate on X-Axis
-        MultiplyMatrixVector(rotated_on_z, rotated_on_zx, matRotX)
+        # rotate on X
+        matRotX.multiply(rotated_on_z, rotated_on_zx)
+        # matRotX.multiply(thisPoint, rotated_on_zx)
 
-        # translate into the screen
+        # translate
         rotated_on_zx.z = rotated_on_zx.z + 3.0
 
-        # project from 3D to 2D
-        MultiplyMatrixVector(rotated_on_zx, projected, matProj)
+        # project to 2D
+        matProj.multiply(rotated_on_zx, projected)
 
         # scale into view
         projected.x = halfWidth * (projected.x + 1.0)
         projected.y = halfHeight * (projected.y + 1.0)
 
-        c = Circle(Point(projected.x, projected.y), 2)
-        c.setFill(white)
-        c.draw(win)
+        p1 = Point(projected.x, projected.y)
+        if p2:
+            l = Line(p1, p2)
+            l.setWidth(3)
+            l.setFill(white)
+            l.draw(win)
+        p2 = p1
 
-        if win.checkMouse() != None:
-            stop = True
-            break
-        if win.checkKey() == " ": break
-        if win.checkKey() != "": sys.exit
 
-    if stop:
-        break
-        
+    if win.checkMouse() != None: break
+    if win.checkKey() == " ": break
+
 #    time.sleep(0.025)
     # win.getMouse()
 
     # clear the screen
-    screenRectangle = Rectangle(Point(0, 0), Point(width, height))
-    screenRectangle.setFill('black')
-    screenRectangle.draw(win)
+    #if (int(angle1) % 2) == 0:
+    win.delete("all")
